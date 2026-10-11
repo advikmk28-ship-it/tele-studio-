@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Studio Teleprompter Studio Hub</title>
+<meta name="theme-color" content="#000000">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{--bg:#0b0e1a;--glass:rgba(255,255,255,.06);--line:rgba(255,255,255,.12);--tx:#eef1fb;--mut:#98a0bd;--live:#ff5d73;--ok:#3ddcc0;--guide:#ffc857}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--tx);font-family:'Atkinson Hyperlegible',system-ui,sans-serif;overflow:hidden}
+body{background:radial-gradient(900px 500px at 15% -10%,#25306b55,transparent),radial-gradient(700px 500px at 100% 100%,#6b255a44,transparent),var(--bg)}
+.glass{background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.btn{display:inline-flex;align-items:center;gap:.4rem;padding:.5rem .75rem;border-radius:.75rem;background:var(--glass);border:1px solid var(--line);color:var(--tx);font-size:.875rem;cursor:pointer;transition:background .15s,border-color .15s;touch-action:manipulation}
+.btn:hover{background:rgba(255,255,255,.12)}.btn:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--guide);outline-offset:2px}
+.btn.on{background:rgba(255,93,115,.2);border-color:var(--live)}
+.btn svg{width:18px;height:18px}
+.seg button{padding:.35rem .6rem;font-size:.8rem;color:var(--mut)}.seg button.on{background:var(--tx);color:#10142a;border-radius:.5rem}
+#stage{overflow-y:hidden;position:absolute;inset:0;scrollbar-width:none}
+#content{position:relative;padding:50vh 8% 60vh;font-weight:700;line-height:1.35;text-align:center;text-shadow:0 2px 12px #000a}
+#content p{margin:0 0 1.1em}#content span.r{opacity:.4}
+
+/* VIEW-ONLY STAGE SCROLLBAR HIDE */
+#vStage{overflow-y:hidden;position:absolute;inset:0;scrollbar-width:none}
+#vContent{position:relative;padding:50vh 8% 60vh;font-weight:700;line-height:1.35;text-align:center;text-shadow:0 2px 12px #000a}
+#vContent p{margin:0 0 1.1em}
+
+.ro{touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;overscroll-behavior:none}
+input[type=range]{accent-color:var(--live)}
+.tg{width:2.4rem;height:1.4rem;border-radius:99px;background:#fff3;position:relative;cursor:pointer;border:0}.tg::after{content:"";position:absolute;top:3px;left:3px;width:1rem;height:1rem;border-radius:50%;background:#fff;transition:transform .15s}.tg.on{background:var(--ok)}.tg.on::after{transform:translateX(1rem)}
+
+.dp path.tri { fill: rgba(255,255,255,0.12); stroke: var(--line); stroke-width: 3; cursor: pointer; transition: fill 0.15s, transform 0.1s; }
+.dp path.tri:active { fill: rgba(255, 200, 87, 0.45); }
+.dp circle.c { fill: var(--live); stroke: var(--bg); stroke-width: 4; cursor: pointer; }
+.dp circle.c:active { fill: #ff8196; }
+.dp .ic { fill: none; stroke: var(--tx); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+
+body.win { background: #000000 !important; }
+body.win #desk > header, body.win aside { display: none !important; }
+body.win #desk > main { padding: 0 !important; margin: 0 !important; width: 100vw !important; height: 100vh !important; }
+body.win #wrap {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 999 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  border-radius: 0 !important;
+  border: none !important;
+  background: #000000 !important;
+}
+#bExit { display: none; }
+body.win #bExit { display: inline-flex !important; }
+</style>
+</head>
+<body>
+
+<div id="desk" class="h-full flex flex-col">
+  <header class="glass m-2 mb-0 rounded-2xl px-3 py-2 flex flex-wrap items-center gap-2">
+    <div class="font-bold text-lg mr-auto flex items-center gap-2"><i data-lucide="radio" class="text-[var(--live)]"></i>Studio Hub (Host)</div>
+    <span id="badge" class="flex items-center gap-2 text-xs px-3 py-1.5 rounded-full glass"><i id="dot" class="w-2 h-2 rounded-full bg-gray-500 inline-block"></i><span id="badgeTx">No connections</span></span>
+    <button class="btn" id="bImport" title="Import script"><i data-lucide="file-text"></i><span class="hidden lg:inline">Import</span></button>
+    <button class="btn bg-indigo-600/30 border-indigo-400/40" id="bPair"><i data-lucide="share-2"></i><span>Connect Devices</span></button>
+    <button class="btn" id="bEd" title="Toggle editor"><i data-lucide="panel-right"></i></button>
+    <button class="btn" id="bFs" title="Fullscreen (F)"><i data-lucide="maximize"></i><span class="hidden sm:inline">Fullscreen</span></button>
+    <input type="file" id="file" accept=".txt,.md,.markdown,.docx,.text" class="hidden">
+  </header>
+
+  <main class="flex-1 min-h-0 flex flex-col md:flex-row gap-2 p-2">
+    <section id="wrap" class="relative flex-1 min-h-[40vh] min-w-0 rounded-2xl overflow-hidden border border-[var(--line)] bg-black">
+      <div id="stage" class="ro" style="user-select:text"><div id="content" style="font-size:56px"></div></div>
+      <div id="guide" class="absolute left-0 right-0 pointer-events-none z-10" style="top:35%;height:1.5em;transform:translateY(-.2em);font-size:56px;border-block:2px solid var(--guide);background:rgba(255,200,87,.08)"></div>
+      <div class="absolute top-0 inset-x-0 h-1 z-20 bg-white/10"><div id="pbar" class="h-full bg-[var(--live)]" style="width:0"></div></div>
+      <div class="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/90 to-transparent pointer-events-none z-10"></div>
+      
+      <button id="bExit" class="btn absolute top-4 left-4 z-50 bg-white/10 hover:bg-white/20 backdrop-blur-md" title="Exit Fullscreen (Esc)">
+        <i data-lucide="minimize-2"></i>Exit Fullscreen
+      </button>
+
+      <div id="toast" class="hidden absolute top-3 left-1/2 -translate-x-1/2 z-40 glass rounded-xl px-4 py-2 text-sm max-w-[90%] text-center"></div>
+      
+      <div class="absolute bottom-3 inset-x-3 z-30 glass rounded-2xl p-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm bg-black/40 backdrop-blur-md">
+        <button class="btn" id="bPlay"><i data-lucide="play"></i><span>Play</span></button>
+        <button class="btn" id="bTop" title="Restart"><i data-lucide="rotate-ccw"></i></button>
+        <label class="flex items-center gap-2">Speed <input id="spd" type="range" min="0.5" max="10" step="0.5" value="2" class="w-28"><b id="spdV" class="w-10">2.0x</b></label>
+        <label class="flex items-center gap-2">Size <input id="fnt" type="range" min="24" max="140" step="2" value="56" class="w-24"><b id="fntV" class="w-10">56</b></label>
+        <div class="seg flex glass rounded-xl p-0.5" id="flipSeg"><button data-f="none" class="on">Normal</button><button data-f="x">Flip X</button><button data-f="y">Flip Y</button></div>
+        <label class="flex items-center gap-2">Focus box <button id="tgGuide" class="tg on" role="switch" aria-checked="true" aria-label="Focus box"></button></label>
+      </div>
+    </section>
+
+    <aside id="ed" class="glass rounded-2xl p-3 flex flex-col gap-2 md:w-80 lg:w-96 h-64 md:h-auto shrink-0">
+      <div class="flex items-center justify-between">
+        <b>Script Editor</b>
+        <div class="flex gap-1">
+          <button class="btn !py-1 text-xs" id="bSaveScript" title="Save current script"><i data-lucide="bookmark"></i>Save</button>
+          <button class="btn !py-1 text-xs" id="bClear"><i data-lucide="trash-2"></i>Clear</button>
+        </div>
+      </div>
+
+      <div class="flex gap-1 items-center">
+        <select id="savedSelect" class="flex-1 bg-black/40 border border-[var(--line)] rounded-xl px-2 py-1 text-xs text-[var(--tx)] outline-none">
+          <option value="">-- Saved Scripts --</option>
+        </select>
+        <button class="btn !p-1 text-xs" id="bDelSaved" title="Delete selected script"><i data-lucide="trash"></i></button>
+      </div>
+
+      <textarea id="txt" class="flex-1 min-h-0 w-full bg-black/30 border border-[var(--line)] rounded-xl p-3 text-sm resize-none" placeholder="Type or paste your script here..."></textarea>
+      
+      <div class="grid grid-cols-3 gap-2 text-center text-xs text-[var(--mut)]">
+        <div class="glass rounded-xl p-2"><b id="stW" class="block text-base text-[var(--tx)]">0</b>words</div>
+        <div class="glass rounded-xl p-2"><b id="stC" class="block text-base text-[var(--tx)]">0</b>chars</div>
+        <div class="glass rounded-xl p-2"><b id="stT" class="block text-base text-[var(--tx)]">0:00</b>read time</div>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<div id="modal" class="hidden fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+  <div class="glass rounded-3xl p-6 max-w-sm w-full text-center bg-[#12162a]">
+    <div class="flex justify-between items-center mb-3">
+      <b class="text-lg">Connect Secondary Device</b>
+      <button class="btn !p-2" id="mClose" aria-label="Close"><i data-lucide="x"></i></button>
+    </div>
+
+    <div class="flex glass rounded-xl p-1 mb-4">
+      <button class="flex-1 py-1.5 rounded-lg text-xs font-bold transition on" id="tabRemoteBtn">Mobile Remote</button>
+      <button class="flex-1 py-1.5 rounded-lg text-xs font-bold transition" id="tabViewerBtn">View-Only Screen</button>
+    </div>
+
+    <div id="qrBox" class="mx-auto bg-white p-3 rounded-2xl w-fit min-h-[220px] min-w-[220px] flex items-center justify-center text-black text-sm">Generating QR…</div>
+    <p class="text-xs text-[var(--mut)] mt-3" id="qrDesc">Scan with phone to open mobile remote controller.</p>
+    <p id="mUrl" class="text-xs break-all mt-2 text-[var(--mut)]"></p>
+    
+    <div class="flex gap-2 justify-center mt-3">
+      <button class="btn text-xs" id="mCopy"><i data-lucide="copy"></i>Copy link</button>
+      <button class="btn text-xs" id="mNew"><i data-lucide="refresh-cw"></i>New code</button>
+    </div>
+  </div>
+</div>
+
+<div id="remote" class="hidden ro fixed inset-0 flex-col justify-between p-6 bg-[#0b0e1a]" style="padding-top:max(1.5rem,env(safe-area-inset-top));padding-bottom:max(1.5rem,env(safe-area-inset-bottom))">
+  <div class="glass rounded-2xl p-4 flex items-center gap-3">
+    <button class="btn !p-3" id="rPlay" aria-label="Play or pause"><i data-lucide="play"></i></button>
+    <div id="rBar" class="flex-1 h-4 rounded-full bg-white/10 overflow-hidden cursor-pointer" role="progressbar"><div id="rFill" class="h-full bg-[var(--live)]" style="width:0%"></div></div>
+    <b id="rPct" class="w-10 text-right text-sm">0%</b>
+  </div>
+
+  <div class="flex-1 flex items-center justify-center my-auto min-h-0 py-2">
+    <svg id="dp" class="dp" viewBox="0 0 200 300" style="width:min(80vw,50vh);height:auto;touch-action:manipulation;user-select:none"></svg>
+  </div>
+
+  <div class="text-center text-sm text-[var(--mut)]" id="rStat">Connecting to host…</div>
+  <button class="btn justify-center hidden" id="rRetry"><i data-lucide="refresh-cw"></i>Reconnect</button>
+</div>
+
+<div id="viewer" class="hidden ro fixed inset-0 flex flex-col bg-black overflow-hidden">
+  <div id="vStage" class="relative flex-1 overflow-y-hidden">
+    <div id="vContent"></div>
+  </div>
+  <div class="absolute bottom-4 left-4 z-30 glass rounded-xl px-3 py-1.5 text-xs text-[var(--mut)] flex items-center gap-2">
+    <span id="vDot" class="w-2 h-2 rounded-full bg-yellow-500 inline-block"></span>
+    <span id="vStat">Syncing with Host Computer...</span>
+  </div>
+</div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const icons = () => window.lucide && lucide.createIcons();
+const setIcon = (el, name) => { el.innerHTML = `<i data-lucide="${name}"></i>`; icons(); };
+const fmtT = m => { const s = Math.round(m * 60); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+const norm = w => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+const SAMPLE = "Welcome to Studio Prompter Hub.\n\nThis is the main computer screen.\nYou can open the 'Connect Devices' menu to pair your Mobile Remote or View-Only Second Screen Tablet.\n\nWhatever you type in the editor updates everywhere instantly!";
+
+const S = { playing: false, speed: 2, font: 56, flip: 'none', guide: true, text: SAMPLE };
+const Store = {
+  k: 'studio-prompter-v4',
+  load() { try { return JSON.parse(localStorage.getItem(this.k)) || {}; } catch (_) { return {}; } },
+  put(o) { try { localStorage.setItem(this.k, JSON.stringify(Object.assign(this.load(), o))) } catch (_) {} }
+};
+
+const Prompter = {
+  words: [], paras: [], pos: 0, last: 0, target: null, readIdx: 0,
+  init() {
+    this.stage = $('#stage'); this.content = $('#content');
+    this.stage.addEventListener('scroll', () => { if (Math.abs(this.stage.scrollTop - this.pos) > 2) this.pos = this.stage.scrollTop; });
+    this.stage.addEventListener('wheel', e => { e.preventDefault(); this.nudge(S.flip === 'y' ? -e.deltaY : e.deltaY); }, { passive: false });
+    let ty = null;
+    this.stage.addEventListener('touchstart', e => { ty = e.touches[0].clientY; }, { passive: true });
+    this.stage.addEventListener('touchmove', e => { e.preventDefault(); const y = e.touches[0].clientY; if (ty !== null) this.nudge((ty - y) * (S.flip === 'y' ? -1 : 1)); ty = y; }, { passive: false });
+    this.stage.addEventListener('touchend', () => { ty = null; });
+    requestAnimationFrame(t => this.loop(t));
+  },
+  render(text) {
+    S.text = text;
+    const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    let i = 0; this.words = [];
+    const html = text.split(/\n+/).filter(p => p.trim()).map(p =>
+      '<p>' + p.trim().split(/\s+/).map(w => { this.words.push(norm(w)); return `<span data-i="${i++}">${esc(w)}</span>`; }).join(' ') + '</p>').join('');
+    this.content.innerHTML = html || '<p style="opacity:.4">Your script appears here.</p>';
+    this.paras = [...this.content.querySelectorAll('p')];
+    this.readIdx = 0; this.target = null; this.spans = null; this.track();
+    Host.broadcast();
+  },
+  max() { return Math.max(0, this.stage.scrollHeight - this.stage.clientHeight); },
+  setPos(p) { this.pos = clamp(p, 0, this.max()); this.stage.scrollTop = this.pos; Host.broadcast(); },
+  nudge(px) { this.target = null; this.setPos(this.pos + px); },
+  progress() { const m = this.max(); return m ? this.pos / m : 0; },
+  seek(f) { this.target = null; this.setPos(f * this.max()); },
+  setPlaying(v) { S.playing = v; if (S.playing && this.pos >= this.max() - 1) this.setPos(0); UI.sync(); Host.broadcast(); },
+  setSpeed(v) { S.speed = clamp(Math.round(v * 2) / 2, 0.5, 10); UI.sync(); Host.broadcast(); },
+  setFont(v) { S.font = clamp(Math.round(v / 2) * 2, 24, 140); this.content.style.fontSize = S.font + 'px'; $('#guide').style.fontSize = S.font + 'px'; UI.sync(); Host.broadcast(); },
+  setFlip(f) { S.flip = f; this.stage.style.transform = f === 'x' ? 'scaleX(-1)' : f === 'y' ? 'scaleY(-1)' : ''; UI.sync(); Host.broadcast(); },
+  markRead(idx) {
+    const sp = this.content.querySelectorAll('span');
+    for (let i = Math.min(idx, this.readIdx); i < Math.max(idx, this.readIdx); i++) sp[i] && sp[i].classList.toggle('r', i < idx);
+    this.readIdx = idx;
+  },
+  track() {
+    const sp = this.spans || (this.spans = [...this.content.querySelectorAll('span[data-i]')]);
+    const b = $('#pbar'); if (b) b.style.width = (this.progress() * 100).toFixed(1) + '%';
+    if (!sp.length) return;
+    const y = this.pos + this.stage.clientHeight * 0.35 - S.font * 0.6; let lo = 0, hi = sp.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (sp[m].offsetTop < y) lo = m + 1; else hi = m; }
+    if (lo !== this.readIdx) this.markRead(lo);
+  },
+  loop(t) {
+    const dt = Math.min(0.1, (t - (this.last || t)) / 1000); this.last = t;
+    if (t - (this.lt || 0) > 100) { this.lt = t; this.track(); }
+    if (this.target !== null) {
+      this.setPos(this.pos + (this.target - this.pos) * Math.min(1, dt * 3.5));
+      if (Math.abs(this.target - this.pos) < 0.5) this.target = null;
+    } else if (S.playing) {
+      this.setPos(this.pos + S.speed * 30 * dt);
+      if (this.pos >= this.max() - 0.5) this.setPlaying(false);
+    }
+    requestAnimationFrame(x => this.loop(x));
+  }
+};
+
+const Script = {
+  init() {
+    this.ta = $('#txt');
+    this.savedSelect = $('#savedSelect');
+    this.ta.addEventListener('input', () => this.update());
+    
+    $('#bClear').onclick = () => { this.ta.value = ''; this.update(); };
+    $('#bSaveScript').onclick = () => this.saveScript();
+    $('#bDelSaved').onclick = () => this.deleteScript();
+    
+    this.savedSelect.onchange = e => {
+      const idx = e.target.value;
+      if (idx !== "") {
+        const saved = this.getSavedList();
+        if (saved[idx]) { this.ta.value = saved[idx].text; this.update(); UI.toast('Script loaded'); }
+      }
+    };
+
+    const sv = Store.load().text;
+    this.ta.value = typeof sv === 'string' ? sv : SAMPLE;
+    this.update();
+    this.renderSavedList();
+  },
+  set(text) { this.ta.value = text; this.update(); Prompter.setPlaying(false); Prompter.setPos(0); },
+  update() {
+    const t = this.ta.value, w = (t.trim().match(/\S+/g) || []).length;
+    $('#stW').textContent = w; $('#stC').textContent = t.length; $('#stT').textContent = fmtT(w / 130);
+    Prompter.render(t); Store.put({ text: t });
+  },
+  getSavedList() {
+    try { return JSON.parse(localStorage.getItem('prompter_saved_scripts')) || []; } catch (_) { return []; }
+  },
+  saveScript() {
+    const text = this.ta.value.trim();
+    if (!text) { UI.toast('Script is empty!', true); return; }
+    const title = prompt('Enter a name for this script:', text.substring(0, 20) + '...');
+    if (!title) return;
+    const list = this.getSavedList();
+    list.unshift({ title, text, date: new Date().toLocaleDateString() });
+    localStorage.setItem('prompter_saved_scripts', JSON.stringify(list));
+    this.renderSavedList();
+    UI.toast('Script Saved!');
+  },
+  deleteScript() {
+    const idx = this.savedSelect.value;
+    if (idx === "") { UI.toast('Select a script to delete', true); return; }
+    let list = this.getSavedList();
+    list.splice(idx, 1);
+    localStorage.setItem('prompter_saved_scripts', JSON.stringify(list));
+    this.renderSavedList();
+    UI.toast('Script Deleted');
+  },
+  renderSavedList() {
+    const list = this.getSavedList();
+    this.savedSelect.innerHTML = '<option value="">-- Saved Scripts (' + list.length + ') --</option>';
+    list.forEach((s, i) => {
+      const opt = document.createElement('option'); opt.value = i; opt.textContent = s.title;
+      this.savedSelect.appendChild(opt);
+    });
+  }
+};
+
+const Importer = {
+  init() {
+    const f = $('#file'); $('#bImport').onclick = () => f.click();
+    f.onchange = () => { const file = f.files[0]; f.value = ''; if (file) this.load(file); };
+  },
+  async load(file) {
+    try { const text = await file.text(); Script.set(text.trim()); UI.toast(`Loaded ${file.name}`); }
+    catch (e) { UI.toast('Import failed', true); }
+  }
+};
+
+const Host = {
+  peer: null, id: null, connections: [], activeTab: 'remote',
+  init() {
+    if (!window.Peer) return;
+    const p = this.peer = new Peer();
+    p.on('open', id => { this.id = id; this.updateBadge(); this.makeQR(); });
+    p.on('connection', c => {
+      this.connections.push(c);
+      c.on('open', () => { this.updateBadge(); this.sendState(c); });
+      c.on('data', d => this.handleCommand(d, c));
+      const removeConn = () => {
+        this.connections = this.connections.filter(item => item !== c);
+        this.updateBadge();
+      };
+      c.on('close', removeConn); c.on('error', removeConn);
+    });
+  },
+  updateBadge() {
+    const count = this.connections.length;
+    $('#dot').className = `w-2 h-2 rounded-full inline-block ${count > 0 ? 'bg-[var(--ok)]' : 'bg-gray-500'}`;
+    $('#badgeTx').textContent = count > 0 ? `${count} device(s) connected` : 'No connections';
+  },
+  url(mode) {
+    return location.href.split('#')[0] + `#${mode}-` + this.id;
+  },
+  makeQR() {
+    if (!this.id) return;
+    const box = $('#qrBox'); box.innerHTML = '';
+    const targetUrl = this.url(this.activeTab);
+    try {
+      new QRCode(box, { text: targetUrl, width: 200, height: 200, colorDark: '#000', colorLight: '#fff' });
+    } catch (_) { box.textContent = 'QR creation failed'; }
+    $('#mUrl').textContent = targetUrl;
+    $('#qrDesc').textContent = this.activeTab === 'remote' 
+      ? 'Scan with phone to open mobile remote controller.' 
+      : 'Scan with second screen / tablet for Fullscreen View-Only teleprompter.';
+  },
+  broadcast() {
+    this.connections.forEach(c => this.sendState(c));
+  },
+  sendState(c) {
+    if (c?.open) {
+      try {
+        c.send({
+          t: 'state',
+          playing: S.playing,
+          speed: S.speed,
+          font: S.font,
+          p: Prompter.progress(),
+          text: S.text
+        });
+      } catch (_) {}
+    }
+  },
+  handleCommand(d, c) {
+    if (!d) return;
+    if (d.t === 'cmd') {
+      const v = Number(d.v) || 0;
+      switch (d.a) {
+        case 'toggle': Prompter.setPlaying(!S.playing); break;
+        case 'nudge': Prompter.nudge(clamp(v, -400, 400)); break;
+        case 'seek': Prompter.seek(clamp(v, 0, 1)); break;
+      }
+    }
+  }
+};
+
+const RemoteClient = {
+  conn: null, peer: null, id: null, st: { playing: false, speed: 2, font: 56, p: 0 },
+  init(id) {
+    this.id = id; $('#desk').classList.add('hidden'); $('#remote').classList.remove('hidden'); $('#remote').classList.add('flex');
+    this.buildPad();
+    $('#rPlay').onclick = () => this.cmd('toggle');
+    $('#rBar').onclick = e => { const r = e.currentTarget.getBoundingClientRect(); this.cmd('seek', (e.clientX - r.left) / r.width); };
+    this.connect(); this.paint();
+  },
+  connect() {
+    const p = this.peer = new Peer();
+    p.on('open', () => {
+      const c = this.conn = p.connect(this.id, { reliable: true });
+      c.on('open', () => $('#rStat').textContent = 'Connected to Host');
+      c.on('data', d => { if (d?.t === 'state') { this.st = d; this.paint(); } });
+      c.on('close', () => $('#rStat').textContent = 'Disconnected');
+    });
+  },
+  cmd(a, v = 0) { if (this.conn?.open) { try { this.conn.send({ t: 'cmd', a, v }); } catch (_) {} } },
+  paint() {
+    const s = this.st; setIcon($('#rPlay'), s.playing ? 'pause' : 'play');
+    $('#rFill').style.width = (s.p * 100).toFixed(1) + '\%'; $('#rPct').textContent = Math.round(s.p * 100) + '%';
+    const pp = $('#dpPlay'); if (pp) pp.setAttribute('d', s.playing ? 'M92 138v24M108 138v24' : 'M93 136L113 150L93 164Z');
+  },
+  buildPad() {
+    const defs = [
+      { n: 'up', d: 'M 100,20 L 180,120 L 20,120 Z', nudge: -60, ic: 'M100 50L100 95M85 70L100 50L115 70' },
+      { n: 'down', d: 'M 20,180 L 180,180 L 100,280 Z', nudge: 60, ic: 'M100 250L100 205M85 230L100 250L115 230' }
+    ];
+    const svg = $('#dp'); let h = '';
+    defs.forEach(d => { h += `<path class="tri" data-n="${d.n}" d="${d.d}"/><path class="ic" d="${d.ic}"/>`; });
+    h += `<circle class="c" id="dpC" cx="100" cy="150" r="35"/><path id="dpPlay" class="ic" d="M93 136L113 150L93 164Z"/>`;
+    svg.innerHTML = h;
+
+    svg.querySelectorAll('path.tri').forEach(el => {
+      const d = defs.find(x => x.n === el.dataset.n);
+      let timer;
+      const start = () => { this.cmd('nudge', d.nudge); timer = setInterval(() => this.cmd('nudge', d.nudge), 100); };
+      const stop = () => clearInterval(timer);
+      el.addEventListener('pointerdown', e => { e.preventDefault(); start(); });
+      el.addEventListener('pointerup', stop);
+      el.addEventListener('pointerleave', stop);
+    });
+    $('#dpC').addEventListener('pointerdown', e => { e.preventDefault(); this.cmd('toggle'); });
+  }
+};
+
+const ViewerClient = {
+  conn: null, peer: null, id: null,
+  init(id) {
+    this.id = id; 
+    $('#desk').classList.add('hidden'); 
+    $('#viewer').classList.remove('hidden'); 
+    $('#viewer').classList.add('flex');
+    this.connect();
+  },
+  connect() {
+    const p = this.peer = new Peer();
+    p.on('open', () => {
+      const c = this.conn = p.connect(this.id, { reliable: true });
+      c.on('open', () => {
+        $('#vDot').className = 'w-2 h-2 rounded-full inline-block bg-[var(--ok)]';
+        $('#vStat').textContent = 'Connected & Synced';
+        setTimeout(() => $('#viewer div.absolute').classList.add('opacity-0', 'transition-opacity', 'duration-500'), 3000);
+      });
+      c.on('data', d => {
+        if (d?.t === 'state') {
+          this.renderViewerScript(d.text, d.font);
+          const vStage = $('#vStage');
+          const maxScroll = vStage.scrollHeight - vStage.clientHeight;
+          // Smoothly scroll viewer screen to match host percentage progress
+          vStage.scrollTop = d.p * maxScroll;
+        }
+      });
+      c.on('close', () => {
+        $('#vDot').className = 'w-2 h-2 rounded-full inline-block bg-red-500';
+        $('#vStat').textContent = 'Host Disconnected';
+        $('#viewer div.absolute').classList.remove('opacity-0');
+      });
+    });
+  },
+  renderViewerScript(text, fontSize) {
+    const vc = $('#vContent');
+    vc.style.fontSize = fontSize + 'px';
+    const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    const html = (text || '').split(/\n+/).filter(p => p.trim()).map(p =>
+      '<p>' + p.trim().split(/\s+/).map(w => `<span>${esc(w)}</span>`).join(' ') + '</p>').join('');
+    if (vc.innerHTML !== html) {
+      vc.innerHTML = html || '<p style="opacity:.4">Waiting for script from host...</p>';
+    }
+  }
+};
+
+const UI = {
+  init() {
+    $('#bPlay').onclick = () => Prompter.setPlaying(!S.playing);
+    $('#bTop').onclick = () => { Prompter.target = null; Prompter.setPos(0); Prompter.markRead(0); };
+    $('#spd').oninput = e => Prompter.setSpeed(+e.target.value);
+    $('#fnt').oninput = e => Prompter.setFont(+e.target.value);
+    $('#flipSeg').onclick = e => { const b = e.target.closest('button'); if (b) Prompter.setFlip(b.dataset.f); };
+    $('#tgGuide').onclick = () => { S.guide = !S.guide; this.sync(); };
+    $('#bEd').onclick = () => $('#ed').classList.toggle('hidden');
+    $('#bFs').onclick = () => this.toggleFullscreen();
+    $('#bExit').onclick = () => this.toggleFullscreen(false);
+    
+    $('#bPair').onclick = () => { $('#modal').classList.remove('hidden'); Host.makeQR(); };
+    $('#mClose').onclick = () => $('#modal').classList.add('hidden');
+    $('#mNew').onclick = () => Host.makeQR();
+    $('#mCopy').onclick = async () => { try { await navigator.clipboard.writeText(Host.url(Host.activeTab)); this.toast('Link copied'); } catch (_) {} };
+
+    $('#tabRemoteBtn').onclick = () => {
+      Host.activeTab = 'remote';
+      $('#tabRemoteBtn').classList.add('on', 'bg-indigo-600/30');
+      $('#tabViewerBtn').classList.remove('on', 'bg-indigo-600/30');
+      Host.makeQR();
+    };
+    $('#tabViewerBtn').onclick = () => {
+      Host.activeTab = 'viewer';
+      $('#tabViewerBtn').classList.add('on', 'bg-indigo-600/30');
+      $('#tabRemoteBtn').classList.remove('on', 'bg-indigo-600/30');
+      Host.makeQR();
+    };
+    
+    document.addEventListener('keydown', e => {
+      if (/TEXTAREA|INPUT|SELECT/.test(e.target.tagName)) return;
+      if (e.code === 'Space') { e.preventDefault(); Prompter.setPlaying(!S.playing); }
+      else if (e.code === 'KeyF') this.toggleFullscreen();
+      else if (e.code === 'Escape') { $('#modal').classList.add('hidden'); if (document.body.classList.contains('win')) this.toggleFullscreen(false); }
+    });
+    Prompter.setFont(S.font); this.sync();
+  },
+  toggleFullscreen(force) {
+    const on = typeof force === 'boolean' ? force : !document.body.classList.contains('win');
+    document.body.classList.toggle('win', on);
+    if (on) { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); }
+    else { if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen().catch(() => {}); }
+    setIcon($('#bFs'), on ? 'minimize' : 'maximize');
+    window.dispatchEvent(new Event('resize'));
+  },
+  sync() {
+    $('#spd').value = S.speed; $('#spdV').textContent = S.speed.toFixed(1) + 'x';
+    $('#fnt').value = S.font; $('#fntV').textContent = S.font;
+    $('#bPlay').classList.toggle('on', S.playing); $('#bPlay').innerHTML = `<i data-lucide="${S.playing ? 'pause' : 'play'}"></i><span>${S.playing ? 'Pause' : 'Play'}</span>`;
+    document.querySelectorAll('#flipSeg button').forEach(b => b.classList.toggle('on', b.dataset.f === S.flip));
+    $('#tgGuide').classList.toggle('on', S.guide); $('#tgGuide').setAttribute('aria-checked', S.guide);
+    $('#guide').style.display = S.guide ? '' : 'none';
+    icons();
+  },
+  toast(msg, err) {
+    const t = $('#toast'); t.textContent = msg; t.style.borderColor = err ? 'var(--live)' : 'var(--ok)'; t.classList.remove('hidden');
+    setTimeout(() => t.classList.add('hidden'), 2500);
+  }
+};
+
+function boot() {
+  const hash = location.hash;
+  const remoteMatch = hash.match(/^#remote-(.+)$/);
+  const viewerMatch = hash.match(/^#viewer-(.+)$/);
+
+  if (remoteMatch) { icons(); RemoteClient.init(decodeURIComponent(remoteMatch[1])); return; }
+  if (viewerMatch) { icons(); ViewerClient.init(decodeURIComponent(viewerMatch[1])); return; }
+
+  Prompter.init(); Script.init(); Importer.init(); UI.init(); Host.init();
+}
+document.addEventListener('DOMContentLoaded', boot);
+</script>
+</body>
+</html>
