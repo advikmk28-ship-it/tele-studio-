@@ -26,7 +26,6 @@ body{background:radial-gradient(900px 500px at 15% -10%,#25306b55,transparent),r
 #content{position:relative;padding:50vh 8% 60vh;font-weight:700;line-height:1.35;text-align:center;text-shadow:0 2px 12px #000a}
 #content p{margin:0 0 1.1em}#content span.r{opacity:.4}
 
-/* VIEW-ONLY STAGE SCROLLBAR HIDE */
 #vStage{overflow-y:hidden;position:absolute;inset:0;scrollbar-width:none}
 #vContent{position:relative;padding:50vh 8% 60vh;font-weight:700;line-height:1.35;text-align:center;text-shadow:0 2px 12px #000a}
 #vContent p{margin:0 0 1.1em}
@@ -63,7 +62,7 @@ body.win #bExit { display: inline-flex !important; }
 <div id="desk" class="h-full flex flex-col">
   <header class="glass m-2 mb-0 rounded-2xl px-3 py-2 flex flex-wrap items-center gap-2">
     <div class="font-bold text-lg mr-auto flex items-center gap-2"><i data-lucide="radio" class="text-[var(--live)]"></i>Studio Hub (Host)</div>
-    <span id="badge" class="flex items-center gap-2 text-xs px-3 py-1.5 rounded-full glass"><i id="dot" class="w-2 h-2 rounded-full bg-gray-500 inline-block"></i><span id="badgeTx">No connections</span></span>
+    <span id="badge" class="flex items-center gap-2 text-xs px-3 py-1.5 rounded-full glass"><i id="dot" class="w-2 h-2 rounded-full bg-gray-500 inline-block"></i><span id="badgeTx">Initializing...</span></span>
     <button class="btn" id="bImport" title="Import script"><i data-lucide="file-text"></i><span class="hidden lg:inline">Import</span></button>
     <button class="btn bg-indigo-600/30 border-indigo-400/40" id="bPair"><i data-lucide="share-2"></i><span>Connect Devices</span></button>
     <button class="btn" id="bEd" title="Toggle editor"><i data-lucide="panel-right"></i></button>
@@ -181,7 +180,7 @@ const SAMPLE = "Welcome to Studio Prompter Hub.\n\nThis is the main computer scr
 
 const S = { playing: false, speed: 2, font: 56, flip: 'none', guide: true, text: SAMPLE };
 const Store = {
-  k: 'studio-prompter-v4',
+  k: 'studio-prompter-v5',
   load() { try { return JSON.parse(localStorage.getItem(this.k)) || {}; } catch (_) { return {}; } },
   put(o) { try { localStorage.setItem(this.k, JSON.stringify(Object.assign(this.load(), o))) } catch (_) {} }
 };
@@ -322,23 +321,36 @@ const Host = {
   peer: null, id: null, connections: [], activeTab: 'remote',
   init() {
     if (!window.Peer) return;
-    const p = this.peer = new Peer();
-    p.on('open', id => { this.id = id; this.updateBadge(); this.makeQR(); });
+    // Explicitly using standard cloud config options to prevent connection drop issues
+    const p = this.peer = new Peer({ debug: 2 });
+    p.on('open', id => { 
+      this.id = id; 
+      this.updateBadge(); 
+      this.makeQR(); 
+    });
     p.on('connection', c => {
       this.connections.push(c);
-      c.on('open', () => { this.updateBadge(); this.sendState(c); });
+      c.on('open', () => { 
+        this.updateBadge(); 
+        this.sendState(c); 
+      });
       c.on('data', d => this.handleCommand(d, c));
       const removeConn = () => {
         this.connections = this.connections.filter(item => item !== c);
         this.updateBadge();
       };
-      c.on('close', removeConn); c.on('error', removeConn);
+      c.on('close', removeConn); 
+      c.on('error', removeConn);
+    });
+    p.on('error', err => {
+      console.error('PeerJS error:', err);
+      $('#badgeTx').textContent = 'Connection error';
     });
   },
   updateBadge() {
     const count = this.connections.length;
     $('#dot').className = `w-2 h-2 rounded-full inline-block ${count > 0 ? 'bg-[var(--ok)]' : 'bg-gray-500'}`;
-    $('#badgeTx').textContent = count > 0 ? `${count} device(s) connected` : 'No connections';
+    $('#badgeTx').textContent = count > 0 ? `${count} device(s) connected` : 'Ready to connect';
   },
   url(mode) {
     return location.href.split('#')[0] + `#${mode}-` + this.id;
@@ -348,7 +360,7 @@ const Host = {
     const box = $('#qrBox'); box.innerHTML = '';
     const targetUrl = this.url(this.activeTab);
     try {
-      new QRCode(box, { text: targetUrl, width: 200, height: 200, colorDark: '#000', colorLight: '#fff' });
+      new QRCode(box, { text: targetUrl, width: 200, height: 200, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.M });
     } catch (_) { box.textContent = 'QR creation failed'; }
     $('#mUrl').textContent = targetUrl;
     $('#qrDesc').textContent = this.activeTab === 'remote' 
@@ -388,22 +400,54 @@ const Host = {
 const RemoteClient = {
   conn: null, peer: null, id: null, st: { playing: false, speed: 2, font: 56, p: 0 },
   init(id) {
-    this.id = id; $('#desk').classList.add('hidden'); $('#remote').classList.remove('hidden'); $('#remote').classList.add('flex');
+    this.id = id; 
+    $('#desk').classList.add('hidden'); 
+    $('#remote').classList.remove('hidden'); 
+    $('#remote').classList.add('flex');
     this.buildPad();
     $('#rPlay').onclick = () => this.cmd('toggle');
     $('#rBar').onclick = e => { const r = e.currentTarget.getBoundingClientRect(); this.cmd('seek', (e.clientX - r.left) / r.width); };
-    this.connect(); this.paint();
+    $('#rRetry').onclick = () => this.connect();
+    this.connect(); 
+    this.paint();
   },
   connect() {
+    $('#rStat').textContent = 'Connecting to host...';
+    try { this.peer?.destroy(); } catch(_) {}
     const p = this.peer = new Peer();
     p.on('open', () => {
       const c = this.conn = p.connect(this.id, { reliable: true });
-      c.on('open', () => $('#rStat').textContent = 'Connected to Host');
+      const timeout = setTimeout(() => {
+        if (!c.open) $('#rStat').textContent = 'Connection timeout. Refresh host QR.';
+      }, 10000);
+
+      c.on('open', () => {
+        clearTimeout(timeout);
+        $('#rStat').textContent = 'Connected to Host';
+        $('#rRetry').classList.add('hidden');
+      });
       c.on('data', d => { if (d?.t === 'state') { this.st = d; this.paint(); } });
-      c.on('close', () => $('#rStat').textContent = 'Disconnected');
+      c.on('close', () => {
+        $('#rStat').textContent = 'Disconnected from Host';
+        $('#rRetry').classList.remove('hidden');
+      });
+      c.on('error', () => {
+        $('#rStat').textContent = 'Connection error';
+        $('#rRetry').classList.remove('hidden');
+      });
+    });
+    p.on('error', () => {
+      $('#rStat').textContent = 'Host not found or offline';
+      $('#rRetry').classList.remove('hidden');
     });
   },
-  cmd(a, v = 0) { if (this.conn?.open) { try { this.conn.send({ t: 'cmd', a, v }); } catch (_) {} } },
+  cmd(a, v = 0) { 
+    if (this.conn?.open) { 
+      try { this.conn.send({ t: 'cmd', a, v }); navigator.vibrate?.(30); } catch (_) {} 
+    } else {
+      $('#rStat').textContent = 'Not connected!';
+    } 
+  },
   paint() {
     const s = this.st; setIcon($('#rPlay'), s.playing ? 'pause' : 'play');
     $('#rFill').style.width = (s.p * 100).toFixed(1) + '\%'; $('#rPct').textContent = Math.round(s.p * 100) + '%';
@@ -442,6 +486,7 @@ const ViewerClient = {
     this.connect();
   },
   connect() {
+    try { this.peer?.destroy(); } catch(_) {}
     const p = this.peer = new Peer();
     p.on('open', () => {
       const c = this.conn = p.connect(this.id, { reliable: true });
@@ -455,7 +500,6 @@ const ViewerClient = {
           this.renderViewerScript(d.text, d.font);
           const vStage = $('#vStage');
           const maxScroll = vStage.scrollHeight - vStage.clientHeight;
-          // Smoothly scroll viewer screen to match host percentage progress
           vStage.scrollTop = d.p * maxScroll;
         }
       });
@@ -534,7 +578,7 @@ const UI = {
     icons();
   },
   toast(msg, err) {
-    const t = $('#toast'); t.textContent = msg; t.style.borderColor = err ? 'var(--live)' : 'var(--ok)'; t.classList.remove('hidden');
+    const t = $('#toast'); t.textContent = msg; t.style.borderColor = err ? 'var(--live)' : 'var(--ok)'; t.classList.add('hidden');
     setTimeout(() => t.classList.add('hidden'), 2500);
   }
 };
